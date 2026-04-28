@@ -30,7 +30,7 @@ def connect() -> MilvusClient:
     Returns:
         MilvusClient 实例，后续所有操作都通过它发起。
     """
-    client = MilvusClient(uri=URI)
+    pass
     print(f"[connect] 已连接到 {URI}")
     return client
 
@@ -46,7 +46,7 @@ def has_collection(client: MilvusClient) -> bool:
     Returns:
         True 表示集合已存在，False 表示不存在。
     """
-    exists = client.has_collection(COLLECTION_NAME)
+    pass
     print(f"[has_collection] 集合 '{COLLECTION_NAME}' 存在: {exists}")
     return exists
 
@@ -65,49 +65,29 @@ def create_schema_and_fields():
     """
     # auto_id=False：主键由调用方生成（项目中用 chunk.metadata["id"]）
     # enable_dynamic_field=True：允许插入 schema 未定义的字段
-    schema = MilvusClient.create_schema(auto_id=False, enable_dynamic_field=True)
+    pass
 
     # 字段 1：id — VARCHAR 主键
     # 项目中 max_length=100，这里用 64 简化
-    schema.add_field(
-        field_name="id",
-        datatype=DataType.VARCHAR,
-        is_primary=True,
-        max_length=64,
-    )
+    pass
 
     # 字段 2：dense_vector — 稠密向量（FLOAT_VECTOR）
     # 维度 1024 与 BGE-M3 的 dense 输出一致
     # 用于语义搜索，能捕获"意思相近但用词不同"的内容
-    schema.add_field(
-        field_name="dense_vector",
-        datatype=DataType.FLOAT_VECTOR,
-        dim=1024,
-    )
+    pass
 
     # 字段 3：sparse_vector — 稀疏向量（SPARSE_FLOAT_VECTOR）
     # 无需指定维度，长度由数据决定
     # 用于子词级别的精确匹配，与稠密向量互补
-    schema.add_field(
-        field_name="sparse_vector",
-        datatype=DataType.SPARSE_FLOAT_VECTOR,
-    )
+    pass
 
     # 字段 4：text — 文本内容
     # 存储简历子块的原文，VARCHAR 最大 65535
-    schema.add_field(
-        field_name="text",
-        datatype=DataType.VARCHAR,
-        max_length=65535,
-    )
+    pass
 
     # 字段 5：gender — 标量字段，用于元数据过滤
     # vector_store.py 步骤 3.9，max_length=10
-    schema.add_field(
-        field_name="gender",
-        datatype=DataType.VARCHAR,
-        max_length=16,
-    )
+    pass
 
     print("[create_schema_and_fields] Schema 创建完成，包含 5 个字段")
     return schema
@@ -168,11 +148,7 @@ def create_collection(client: MilvusClient, schema, index_params):
         schema: create_schema_and_fields() 返回的 schema。
         index_params: create_index_params() 返回的索引参数。
     """
-    client.create_collection(
-        collection_name=COLLECTION_NAME,
-        schema=schema,
-        index_params=index_params,
-    )
+    pass
     print(f"[create_collection] 集合 '{COLLECTION_NAME}' 创建完成")
 
 
@@ -231,7 +207,7 @@ def insert(client: MilvusClient):
         },
     ]
 
-    result = client.insert(COLLECTION_NAME, data)
+    pass
     print(f"[insert] 插入 {len(data)} 条数据，结果: {result}")
 
     # 强制刷新，确保数据已写入存储并可被检索
@@ -256,11 +232,7 @@ def get_by_id(client: MilvusClient, ids: list):
     Returns:
         匹配的文档列表。
     """
-    results = client.get(
-        collection_name=COLLECTION_NAME,
-        ids=ids,
-        output_fields=["id", "text", "gender"],
-    )
+    pass
     print(f"[get_by_id] 获取到 {len(results)} 条记录:")
     for r in results:
         print(f"  - id={r['id']}, gender={r['gender']}, text={r['text'][:50]}...")
@@ -281,11 +253,7 @@ def query(client: MilvusClient):
     Returns:
         符合条件的文档列表。
     """
-    results = client.query(
-        collection_name=COLLECTION_NAME,
-        filter='gender == "男"',
-        output_fields=["id", "text", "gender"],
-    )
+    pass
     print(f"[query] gender=='男' 的记录共 {len(results)} 条:")
     for r in results:
         print(f"  - id={r['id']}, text={r['text'][:50]}...")
@@ -324,21 +292,10 @@ def search_dense(client: MilvusClient):
     #               nprobe 越小：只快速检查最相关的几个聚类 → 速度越快，但可能错过真正的近邻 → 召回率下降。
     #           常用范围：一般取 1 ~ nlist 之间的整数。如果设置为 nprobe = nlist，则相当于扫描所有聚类，精度等同于暴力搜索（FLAT），但性能会显著下降。
     # - limit: 返回 Top-K 条结果
-    dense_req = AnnSearchRequest(
-        data=[query_vector],
-        anns_field="dense_vector",
-        param={"metric_type": "IP", "params": {"nprobe": 10}},
-        limit=3,
-    )
+    pass
 
     # 单路搜索用 hybrid_search 接口（只有 1 个 request）
-    results = client.hybrid_search(
-        collection_name=COLLECTION_NAME,
-        reqs=[dense_req],
-        ranker=WeightedRanker(1.0),  # 单路权重为 1.0
-        limit=3,
-        output_fields=["id", "text", "gender"],
-    )
+    pass
 
     print(f"[search_dense] 稠密向量搜索返回 {len(results[0])} 条结果:")
     for hit in results[0]:
@@ -393,15 +350,7 @@ def hybrid_search(client: MilvusClient):
     #   - 第 2 路（稀疏）权重 0.3：词级匹配作为补充
     # 融合公式：final_score = 0.7 * dense_score + 0.3 * sparse_score
     # 项目中也是这个比例（vector_store.py 第 264 行）
-    ranker = WeightedRanker(0.7, 0.3)
-
-    results = client.hybrid_search(
-        collection_name=COLLECTION_NAME,
-        reqs=[dense_req, sparse_req],
-        ranker=ranker,
-        limit=3,
-        output_fields=["id", "text", "gender"],
-    )
+    pass
 
     print(f"[hybrid_search] 混合搜索返回 {len(results[0])} 条结果:")
     for hit in results[0]:
@@ -431,7 +380,7 @@ def upsert(client: MilvusClient):
         "gender": "男",
     }
 
-    result = client.upsert(COLLECTION_NAME, [updated_data])
+    pass
     print(f"[upsert] 更新结果: {result}")
     return result
 
@@ -450,10 +399,7 @@ def delete(client: MilvusClient):
     Returns:
         删除结果。
     """
-    result = client.delete(
-        collection_name=COLLECTION_NAME,
-        filter='id == "resume_002_chunk_001"',
-    )
+    pass
     print(f"[delete] 删除结果: {result}")
     return result
 

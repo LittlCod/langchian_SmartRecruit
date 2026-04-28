@@ -91,25 +91,19 @@ def connect_and_ping():
         #   port: 端口号，默认 27017
         #   username/password: 认证凭据
         #   authSource: 认证数据库（用户信息存储在 admin 库中）
-        client = MongoClient(
-            host=MONGO_HOST,
-            port=MONGO_PORT,
-            username=MONGO_USER,
-            password=MONGO_PASSWORD,
-            authSource=MONGO_AUTH_SOURCE,
-        )
+        pass
 
         # 执行 ping 命令验证连接
         # ping 是 MongoDB 内置命令，成功返回 {"ok": 1.0}
-        result = client.admin.command("ping")
+        pass
         print(f"[连接成功] ping 结果: {result}")
 
         # 获取数据库实例（此时并未真正创建数据库，插入数据时才会创建）
-        db = client[DEMO_DB]
+        pass
         print(f"[数据库] 已获取数据库: {DEMO_DB}")
 
         # 列出已有集合（首次运行时为空）
-        collections = db.list_collection_names()
+        pass
         print(f"[集合列表] 当前集合: {collections if collections else '（空）'}")
 
         return client
@@ -140,7 +134,7 @@ def insert_one(client):
 
     # 插入文档
     # MongoDB 会自动为每条文档生成唯一的 _id（ObjectId 类型）
-    result = collection.insert_one(doc)
+    pass
 
     print(f"[insert_one] 插入成功")
     print(f"  自动生成的 _id: {result.inserted_id}")
@@ -168,7 +162,7 @@ def insert_many(client):
     docs = SAMPLE_RESUMES[1:]
 
     # ordered=False 表示即使某条文档插入失败，也继续插入其余文档
-    result = collection.insert_many(docs, ordered=False)
+    pass
 
     print(f"[insert_many] 批量插入成功，共插入 {len(result.inserted_ids)} 条")
     for i, oid in enumerate(result.inserted_ids):
@@ -197,8 +191,7 @@ def find_one(client):
 
     # 按姓名查询
     # 查询条件是字典：{"字段名": "值"}
-    query = {"name": "张三"}
-    result = collection.find_one(query)
+    pass
 
     print(f"[find_one] 查询条件: {query}")
     if result:
@@ -209,8 +202,7 @@ def find_one(client):
 
     # 按 ObjectId 查询（MongoDB 中 _id 是主键）
     if result:
-        query_by_id = {"_id": result["_id"]}
-        result_by_id = collection.find_one(query_by_id)
+        pass
         print(f"\n[find_one] 按 _id 查询: {result_by_id['name']}")
 
     return result
@@ -233,11 +225,10 @@ def find(client):
     collection = db.resumes
 
     # 查询所有 gender=="男" 的简历
-    query = {"gender": "男"}
-    cursor = collection.find(query)
+    pass
 
     # 将游标转换为列表（注意：大数据量时应迭代处理，不要一次性转列表）
-    results = list(cursor)
+    pass
 
     print(f"[find] 查询条件: {query}")
     print(f"  匹配文档数: {len(results)}")
@@ -268,21 +259,21 @@ def count_documents(client):
     collection = db.resumes
 
     # 统计全部文档数（空条件）
-    total = collection.count_documents({})
+    pass
     print(f"[count_documents] 总文档数: {total}")
 
     # 按条件统计：男性简历数
-    male_count = collection.count_documents({"gender": "男"})
+    pass
     print(f"[count_documents] 男性简历数: {male_count}")
 
     # 按条件统计：工作年限 >= 5 的简历数
     # $gte 是 MongoDB 比较操作符，表示 "大于等于"
-    experienced_count = collection.count_documents({"work_experience": {"$gte": 5}})
+    pass
     print(f"[count_documents] 工作年限>=5: {experienced_count}")
 
     # 按条件统计：包含 Python 技能的简历数
     # skills 是数组字段，直接用值查询会匹配数组中包含该值的文档
-    python_count = collection.count_documents({"skills": "Python"})
+    pass
     print(f"[count_documents] 会Python的: {python_count}")
 
     return total
@@ -305,19 +296,17 @@ def update_one(client):
     collection = db.resumes
 
     # 更新操作：将张三的年龄从 28 改为 29
-    query = {"name": "张三"}
+    pass
     # $set：只更新指定字段，其他字段保持不变
     # 如果不用 $set，整个文档会被替换
-    update = {"$set": {"age": 29, "expected_salary": "30K-40K"}}
-
-    result = collection.update_one(query, update)
+    pass
 
     print(f"[update_one] 更新条件: {query}")
     print(f"  匹配文档数: {result.matched_count}")
     print(f"  实际修改数: {result.modified_count}")
 
     # 验证更新结果
-    updated_doc = collection.find_one(query)
+    pass
     print(f"  更新后: age={updated_doc['age']}, salary={updated_doc['expected_salary']}")
 
     return result
@@ -352,8 +341,7 @@ def delete_one(client):
     print(f"[delete_one] 已插入测试文档: {test_doc['name']}")
 
     # 按条件删除
-    query = {"name": "测试用户"}
-    result = collection.delete_one(query)
+    pass
 
     print(f"[delete_one] 删除条件: {query}")
     print(f"  删除文档数: {result.deleted_count}")
@@ -385,8 +373,7 @@ def delete_many(client):
     print(f"[delete_many] 删除前文档数: {before_count}")
 
     # 删除所有工作年限 < 3 的简历
-    query = {"work_experience": {"$lt": 3}}
-    result = collection.delete_many(query)
+    pass
 
     print(f"[delete_many] 删除条件: work_experience < 3")
     print(f"  删除文档数: {result.deleted_count}")
