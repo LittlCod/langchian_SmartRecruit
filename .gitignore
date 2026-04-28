@@ -1,0 +1,13 @@
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.env
+research/
+video/
+*.log
+.DS_Store
+.idea
+.jbeval
+.streamlit
+models/

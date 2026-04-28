@@ -1,0 +1,32 @@
+# SmartRecruit 核心依赖
+# 仅列出项目直接 import 的包，传递依赖由 pip 自动解析
+
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+langchain-openai>=0.3.0
+pymilvus>=2.5.0
+milvus-model>=0.2.0
+pymongo>=4.0
+elasticsearch>=8.0,<9.0
+sentence-transformers>=3.0
+pydantic>=2.0
+loguru>=0.7
+streamlit>=1.40
+openai>=1.0
+ragas>=0.2
+datasets>=2.0
+scipy>=1.10
+numpy>=1.24
+python-dotenv>=1.0
+nest-asyncio>=1.6
+tqdm>=4.60
+huggingface-hub>=0.20
+modelscope>=1.10
+unstructured>=0.15
+pypdf>=4.0
+docx2txt>=0.8
+pytesseract>=0.3
+beautifulsoup4>=4.12
+markdown>=3.5
+
