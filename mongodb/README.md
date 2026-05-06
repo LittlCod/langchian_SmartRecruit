@@ -86,6 +86,9 @@ result = client.admin.command("ping")
 
 # 获取数据库实例（不会立即创建，插入数据时才创建）
 db = client["prerequisite_demo"]
+
+# 列出已有集合（首次运行时为空）
+collections = db.list_collection_names()
 ```
 
 输出示例：
