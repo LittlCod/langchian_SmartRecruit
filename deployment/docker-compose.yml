@@ -1,0 +1,169 @@
+services:
+  # ==================== MongoDB ====================
+  mongodb:
+    image: mongo:7.0
+    container_name: smartrecruit-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: "123456"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  mongo-express:
+    image: mongo-express:1.0.2-20-alpine3.19
+    container_name: smartrecruit-mongo-express
+    restart: unless-stopped
+    ports:
+      - "9081:8081"
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_MONGODB_PORT: 27017
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: "123456"
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: "123456"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+  # ==================== Elasticsearch ====================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.0
+    container_name: smartrecruit-elasticsearch
+    restart: unless-stopped
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - http.cors.enabled=true
+      - http.cors.allow-origin="*"
+      - http.cors.allow-headers=X-Requested-With,X-Auth-Token,Content-Type,Content-Length,Authorization
+      - http.cors.allow-credentials=true
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.14.0
+    container_name: smartrecruit-kibana
+    restart: unless-stopped
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - NODE_OPTIONS=--max-old-space-size=1024
+      - ES_HEAP_SIZE=1g
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=d1a66dfd-c4d3-4a0a-8290-2abcb83ab3aa
+      # 资源与功能精简配置
+      - XPACK_REPORTING_ENABLED=false
+      - XPACK_MAPS_ENABLED=false
+      - XPACK_ML_ENABLED=false
+      - XPACK_GRAPH_ENABLED=false
+      - XPACK_FLEET_ENABLED=false
+      - XPACK_APM_ENABLED=false
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    # 以下是限制容器的系统资源，和限制应用内存的环境变量不同，但同样重要
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+
+  # ==================== Milvus 依赖 ====================
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.16
+    container_name: smartrecruit-etcd
+    restart: unless-stopped
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  minio:
+    image: minio/minio:RELEASE.2024-09-22T00-33-43Z
+    container_name: smartrecruit-minio
+    restart: unless-stopped
+    ports:
+      - "9001:9001"    # Console（可选，方便调试）
+      - "9000:9000"    # API
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - minio_data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ==================== Milvus 可视化面板 ====================
+  attu:
+    image: zilliz/attu:v2.4
+    container_name: smartrecruit-attu
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      MILVUS_URL: milvus:19530
+    depends_on:
+      milvus:
+        condition: service_healthy
+
+  # ==================== Milvus ====================
+  milvus:
+    image: milvusdb/milvus:v2.5.4
+    container_name: smartrecruit-milvus
+    restart: unless-stopped
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    command: ["milvus", "run", "standalone"]
+
+volumes:
+  mongo_data:
+  es_data:
+  etcd_data:
+  minio_data:
+  milvus_data:
