@@ -219,7 +219,6 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages([
 1. **最终审核**：作为最后一道关卡，确保简历与【用人需求】高度相关。
 2. **精准推荐**：仅当简历高度匹配时，生成推荐理由；忽略勉强相关或无关的简历。
 3. **JSON 格式**：严格按以下格式输出可能为空的列表，不添加额外解释：
-    ```json
     [
         {{
             "candidate_id": 1,
@@ -229,7 +228,6 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages([
         }},
         ...
     ]
-    ```
     """),
     ("user", "【用人需求】: {input}"),
 ])
