@@ -185,9 +185,9 @@ def process_document(doc: Document) -> List[Document]:
     logger.debug(f"文档 {doc.metadata['file_path']} 切分为 {len(parent_docs)} 个父块")
     for j, parent_doc in enumerate(parent_docs):
         parent_id = f"doc_{doc.metadata['hash']}_parent_{j}"
-        parent_doc.metadata["parent_id"] = parent_id
-        parent_doc.metadata["parent_content"] = parent_doc.page_content
-        parent_doc.metadata.update(doc.metadata)
+        #parent_doc.metadata["parent_id"] = parent_id
+        #parent_doc.metadata["parent_content"] = parent_doc.page_content
+        #parent_doc.metadata.update(doc.metadata)
 
         sub_chunks = child_splitter_to_use.split_documents([parent_doc])
         for k, sub_chunk in enumerate(sub_chunks):

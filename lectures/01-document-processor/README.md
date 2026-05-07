@@ -595,10 +595,10 @@ def process_document(doc: Document) -> List[Document]:
         # 生成父块 ID
         parent_id = f"doc_{doc.metadata['hash']}_parent_{j}"
 
-        # 给父块也加上标识（虽然父块本身不存入数据库，但子块需要引用）
-        parent_doc.metadata["parent_id"] = parent_id
-        parent_doc.metadata["parent_content"] = parent_doc.page_content
-        parent_doc.metadata.update(doc.metadata) # 继承原始文档的 metadata
+        # 给父块也加上标识（父块本身不入库）;这里也可不加
+        #parent_doc.metadata["chunk_id"] = parent_id
+        #parent_doc.metadata["page_content"] = parent_doc.page_content
+        #parent_doc.metadata.update(doc.metadata) # 继承原始文档的 metadata
 
         # 将父块切成子块
         sub_chunks = child_splitter_to_use.split_documents([parent_doc])
