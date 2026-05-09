@@ -14,6 +14,8 @@ from loguru import logger
 from config import config
 import json
 
+from torch.fx.experimental import _config
+
 # --- 日志配置 ---
 logger.add(os.path.join(config.LOG_DIR, "document_processor.log"), rotation="10 MB", encoding="utf-8")
 
@@ -191,6 +193,170 @@ def load_and_hash_document(file_path: str, client: OpenAI) -> tuple[str, str]:
         raise e
 
 
+# --- 简历结构化信息提取的 Prompt 模板 ---
+RESUME_PARSER_PROMPT = """
+你是一个顶级的HR简历分析专家。请从以下简历文本中，提取出关键的结构化信息。
+
+**严格遵守以下规则:**
+1.  **提取字段**: 只提取以下字段：`name` (姓名), `gender` (性别), `age` (年龄), `work_experience` (工作年限)。
+2.  **JSON格式**: 必须严格按照JSON格式输出，不要有任何额外的解释或Markdown标记。
+3.  **逻辑推断**:
+    - **姓名 (name)**: 通常是文本开头最明显的人名。
+    - **性别 (gender)**: 从文本中明确的"男"或"女"字样判断。如果未提及，则为 "未提供"。
+    - **年龄 (age)**: 根据出生年份、或直接描述的年龄计算。例如"1990年出生"在2024年应计算为34岁。如果无法推断，则为 -1。
+    - **工作年限 (work_experience)**: 根据工作经历的总时长计算。例如"2020年7月至2023年7月"是3年。如果无法推断，则为 -1。
+4.  **数值类型**: `age` 和 `work_experience` 必须是整数。
+
+**简历文本:**
+---
+{resume_text}
+---
+
+**输出JSON:**
+"""
+
+def parse_resume_structure(resume_text: str, client: OpenAI) -> Dict[str, Any]:
+    """
+    使用 LLM 从简历纯文本中提取结构化信息。
+
+    为什么不用正则/规则解析？
+    - 简历格式千变万化："男，30岁" vs "Gender: Male, 1994" vs 只写毕业年份不写年龄
+    - 规则永远覆盖不全，LLM 能"理解"语义并灵活推断
+
+    提取的字段会作为元数据存入向量数据库（Milvus），
+    用于检索时的精确过滤（如"只要男性""年龄≤35""5年以上经验"）。
+
+    Args:
+        resume_text: 简历纯文本
+        client: OpenAI 兼容客户端
+
+    Returns:
+        dict，包含 name/gender/age/work_experience 四个字段
+        解析失败时返回默认值 {"name": "未知", "gender": "未提供", "age": -1, "work_experience": -1}
+    """
+    logger.info("开始使用LLM解析简历结构化信息...")
+    try:
+        response = client.chat.completions.create(
+            model="qwen-plus",
+            messages=[
+                {"role": "system", "content": "你是一个顶级的HR简历分析专家。"},
+                {"role": "user", "content": RESUME_PARSER_PROMPT.format(resume_text=resume_text)},
+            ],
+            temperature=0.0,  # 温度设为 0，保证输出稳定可复现
+        )
+        content = response.choices[0].message.content
+        logger.debug(f"LLM原始解析结果: {content}")
+
+        # 清理 LLM 输出：去掉可能的 ```json ``` 包裹
+        json_str = content.strip().removeprefix("```json").removesuffix("```").strip()
+        structured_data = json.loads(json_str)
+
+        # 数据清洗：确保类型正确
+        structured_data['age'] = int(structured_data.get('age', -1))
+        structured_data['work_experience'] = int(structured_data.get('work_experience', -1))
+        structured_data['gender'] = structured_data.get('gender', '未提供')
+
+        logger.info(f"简历结构化信息解析成功: {structured_data}")
+        return structured_data
+
+    except Exception as e:
+        logger.error(f"解析简历结构化信息失败: {e}", exc_info=True)
+        # 优雅降级：返回默认值，不中断整个处理流程
+        return {"name": "未知", "gender": "未提供", "age": -1, "work_experience": -1}
+
+
+def process_document(doc: Document) -> List[Document]:
+    """
+    对单个文档进行父子块切分。
+
+    切分策略：
+    1. 先用父切分器切成大块（1000 字符）
+    2. 再对每个父块用子切分器切成小块（400 字符）
+    3. 每个子块携带父块的 ID 和完整内容（用于检索后返回上下文）
+
+    切分器选择：
+    - .md 文件使用 MarkdownTextSplitter（按标题切分，保持语义完整）
+    - 其他格式使用 RecursiveCharacterTextSplitter（按字符逐级切分）
+
+    Args:
+        doc: LangChain Document 对象，必须包含 metadata['hash'] 和 metadata['file_path']
+
+    Returns:
+        List[Document]：子块列表，每个子块的 metadata 包含：
+        - chunk_id: 子块唯一标识（格式：doc_{hash}_parent_{j}_child_{k}）
+        - parent_id: 父块 ID
+        - parent_content: 父块完整文本（检索命中后直接返回给 LLM，无需二次查询）
+        - hash: 文件 MD5
+        - file_path: 文件路径
+        以及其他从原始 doc 继承的 metadata
+    """
+    logger.info(f"开始处理单个文档: {doc.metadata.get('file_path', 'N/A')}")
+
+    # 创建父子切分器
+    parent_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=config.PARENT_CHUNK_SIZE,
+        chunk_overlap=config.CHUNK_OVERLAP
+    )
+    child_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=config.CHILD_CHUNK_SIZE,
+        chunk_overlap=config.CHUNK_OVERLAP
+    )
+
+    # md
+    md_parent_splitter = MarkdownTextSplitter(
+        chunk_size=config.PARENT_CHUNK_SIZE,
+        chunk_overlap=config.CHUNK_OVERLAP
+    )
+    md_child_splitter = MarkdownTextSplitter(
+        chunk_size=config.CHILD_CHUNK_SIZE,
+        chunk_overlap=config.CHUNK_OVERLAP
+    )
+
+    # 根据文件类型选择
+    file_ext = os.path.splitext(doc.metadata.get("file_path", ""))[1].lower()
+    is_markdown = file_ext == ".md"
+
+    parent_splitter_use = md_parent_splitter if is_markdown else parent_splitter
+    child_splitter_use = md_child_splitter if is_markdown else child_splitter
+
+    # ---------- 开始切分 -----------
+    # step1 切分父块
+    parent_docs = parent_splitter_use.split_documents([doc])
+    logger.debug(f"切分成: {len(parent_docs)}个父块")
+
+    # step2 对每个父块切分子块，并注入metadata
+    child_chunks = []
+    for i,doc in enumerate(parent_docs):
+        # 生成父块id
+        parent_id = f"doc_{doc.metadata.get('hash', '')}_parent_{i}"
+        # 给父块添加标识
+        doc.metadata["parent_id"] = parent_id
+        doc.metadata["parent_content"] = doc.page_content
+        doc.metadata.update(doc.metadata)
+
+        # 将父块切分成子块
+        sub_chunks = child_splitter_use.split_documents([doc])
+        for j,sub_chunk in enumerate(sub_chunks):
+            # 生成子块id
+            child_id = f"{parent_id}_child_{j}"
+            # 给子块注入metadata
+            sub_chunk.metadata["chunk_id"] = child_id
+            sub_chunk.metadata["parent_id"] = parent_id
+            sub_chunk.metadata["parent_content"] = doc.page_content
+            sub_chunk.metadata["id"] = child_id
+            doc.metadata.update(doc.metadata)
+
+            # 添加
+            child_chunks.append(sub_chunk)
+            logger.debug(
+                f"生成子块: {child_id}, 父块: {parent_id}, "
+                f"内容长度: {len(sub_chunk.page_content)}"
+            )
+
+    logger.info(f"文档 {doc.metadata['file_path']} 共生成 {len(child_chunks)} 个子块")
+    return child_chunks
+
+
 # --- [新增] 验证代码 ---
 if __name__ == "__main__":
     """验证文档加载、解析和切分功能"""
@@ -206,7 +372,29 @@ if __name__ == "__main__":
         logger.error(f"测试文件不存在，请确保 '{test_file_path}' 存在后再运行验证。")
     else:
         try:
-           pass
+            # 1. 验证加载和哈希
+            logger.info(f"--- 1. 测试加载与哈希 ---")
+            content, doc_hash = load_and_hash_document(test_file_path, parser_client)
+            assert content and doc_hash
+            logger.info(f"加载成功: hash={doc_hash}, 内容长度={len(content)}")
+
+            # 2. 验证结构化解析
+            logger.info(f"--- 2. 测试结构化信息解析 ---")
+            structured_data = parse_resume_structure(content, parser_client)
+            assert isinstance(structured_data, dict) and "name" in structured_data
+            logger.info(f"解析成功: {structured_data}")
+
+            # 3. 验证切块
+            logger.info(f"--- 3. 测试文档切块 ---")
+            doc = Document(page_content=content, metadata={"file_path": test_file_path, "hash": doc_hash})
+            chunks = process_document(doc)
+            assert chunks and isinstance(chunks, list)
+            logger.info(f"切块成功: 共生成 {len(chunks)} 个子块。")
+            logger.info(f"第一个子块内容: {chunks[0].page_content}")
+            logger.info(f"第一个子块元数据: {chunks[0].metadata}")
+
+            logger.success("document_processor.py 模块所有功能验证通过！")
+            print("\n[SUCCESS] document_processor.py module validation passed!")
         except Exception as e:
             logger.critical(f"document_processor.py 模块验证失败: {e}", exc_info=True)
             print(f"\n[FAILURE] document_processor.py module validation failed. Check logs at ")
