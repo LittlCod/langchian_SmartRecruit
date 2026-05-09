@@ -129,7 +129,7 @@ services:
     container_name: smartrecruit-attu
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3009:3000"
     environment:
       MILVUS_URL: milvus:19530
     depends_on:

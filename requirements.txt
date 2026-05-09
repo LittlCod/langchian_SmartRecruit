@@ -1,4 +1,4 @@
-# SmartRecruit 核心依赖
+﻿# SmartRecruit 核心依赖
 # 仅列出项目直接 import 的包，传递依赖由 pip 自动解析
 
 langchain>=0.3.0
