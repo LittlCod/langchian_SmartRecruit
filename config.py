@@ -20,6 +20,8 @@ class Config(BaseModel):
     MONGO_DB: str = Field(default="resume_db", description="MongoDB 数据库")
     MONGO_USER: str = Field(default="admin", description="MongoDB 用户")
     MONGO_PASSWORD: str = Field(default="123456", description="MongoDB 密码")
+    MONGO_AUTH_SOURCE: str = Field(default="admin", description="MongoDB 认证")
+    MONGO_COLLECTION: str = Field(default="resumes", description="MongoDB 集合")
 
     # Milvus 配置
     MILVUS_HOST: str = Field(default="localhost", description="Milvus 主机")
