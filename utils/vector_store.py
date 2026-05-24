@@ -332,7 +332,7 @@ class VectorStore:
             if hit['_id'] not in all_hits:
                 mongo_data = self.get_metadata_by_hash(hit['_source'].get('metadata', {}).get('hash'))
                 if mongo_data:
-                    all_hits[hit['_id']] = {**hit['_source']['metadata'], **mongo_data.get('structured_data', {})}
+                    all_hits[hit['_id']] = {'text':hit['_source']['content'], **hit['_source']['metadata'], **mongo_data.get('structured_data', {})}
         # 如果没有检索到任何结果,返回空列表
         if not all_hits: return []
 
